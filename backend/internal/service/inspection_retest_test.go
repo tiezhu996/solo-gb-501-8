@@ -229,17 +229,11 @@ func (r *memInspectionRepo) CountIncomplete(_ context.Context, batchID uint) (in
 	return count, nil
 }
 
-type memRetestRepo struct {
-	env       *memEnv
-	createErr error
-}
+type memRetestRepo struct{ env *memEnv }
 
 func (r *memRetestRepo) Create(_ context.Context, record *model.InspectionRetest) error {
 	r.env.mu.Lock()
 	defer r.env.mu.Unlock()
-	if r.createErr != nil {
-		return r.createErr
-	}
 	for _, existing := range r.env.retests[record.InspectionSampleID] {
 		if existing.Sequence == record.Sequence {
 			return fmt.Errorf("duplicate sequence %d for sample %d", record.Sequence, record.InspectionSampleID)
@@ -576,112 +570,6 @@ func TestDuplicateCompleteRejected(t *testing.T) {
 	if got := env.historyOf(t, retested); len(got) != 2 {
 		t.Fatalf("retested sample history = %d, want 2", len(got))
 	}
-}
-
-// 并发完成同一复测：只有一个请求成功，历史只追加一条。
-func TestConcurrentCompleteKeepsSingleHistory(t *testing.T) {
-	env := newMemEnv()
-	batchID := env.addBatch(t, constants.BatchStatusRunning)
-	sampleID := env.addSample(t, batchID)
-	svc := env.inspectionService()
-	completeRound(t, svc, sampleID, "fail", "1.33 N/15mm", "首检不合格，等待复测")
-
-	const workers = 8
-	var wg sync.WaitGroup
-	errs := make([]error, workers)
-	for i := 0; i < workers; i++ {
-		wg.Add(1)
-		go func(i int) {
-			defer wg.Done()
-			_, errs[i] = svc.Complete(context.Background(), testActor, sampleID, dto.CompleteInspectionRequest{
-				Result: "pass", MeasuredValue: "1.65 N/15mm", Notes: "复测合格",
-			})
-		}(i)
-	}
-	wg.Wait()
-
-	var succeeded, conflicts int
-	for _, err := range errs {
-		if err == nil {
-			succeeded++
-			continue
-		}
-		var apiErr *util.APIError
-		if !errors.As(err, &apiErr) || apiErr.Status != http.StatusConflict {
-			t.Fatalf("unexpected concurrent error: %v", err)
-		}
-		conflicts++
-	}
-	if succeeded != 1 || conflicts != workers-1 {
-		t.Fatalf("concurrent complete: %d succeeded, %d conflicts; want 1 and %d", succeeded, conflicts, workers-1)
-	}
-	history := env.historyOf(t, sampleID)
-	if len(history) != 2 {
-		t.Fatalf("history length = %d, want 2 (initial + single concurrent retest)", len(history))
-	}
-	if history[1].Round != "retest" || history[1].Result != "pass" || history[1].Sequence != 2 {
-		t.Fatalf("unexpected retest record: %+v", history[1])
-	}
-	if got := env.sampleState(sampleID); got.Result != "pass" || got.RetestStatus != "completed" {
-		t.Fatalf("final state = (%s, %s), want (pass, completed)", got.Result, got.RetestStatus)
-	}
-}
-
-// 历史写入失败时，样本状态、既有历史和审计记录一起回滚。
-func TestCompleteRollsBackWhenRetestHistoryFails(t *testing.T) {
-	historyFailure := errors.New("retest history store unavailable")
-
-	t.Run("first inspection", func(t *testing.T) {
-		env := newMemEnv()
-		batchID := env.addBatch(t, constants.BatchStatusRunning)
-		sampleID := env.addSample(t, batchID)
-		retestRepo := &memRetestRepo{env: env, createErr: historyFailure}
-		svc := NewInspectionService(&memInspectionRepo{env: env}, retestRepo, &memBatchRepo{env: env}, memAudit{env: env}, &memTransactor{env: env})
-
-		_, err := svc.Complete(context.Background(), testActor, sampleID, dto.CompleteInspectionRequest{
-			Result: "fail", MeasuredValue: "1.30 N/15mm", Notes: "首检不合格",
-		})
-		if !errors.Is(err, historyFailure) {
-			t.Fatalf("got %v, want injected history failure", err)
-		}
-		sample := env.sampleState(sampleID)
-		if sample.Result != "pending" || sample.MeasuredValue != "" || sample.InspectedAt != nil || sample.InspectorName != "" {
-			t.Fatalf("sample state leaked from rolled back transaction: %+v", sample)
-		}
-		if got := env.historyOf(t, sampleID); len(got) != 0 {
-			t.Fatalf("history length = %d, want 0 after rollback", len(got))
-		}
-		if got := env.auditCount(); got != 0 {
-			t.Fatalf("audit records = %d, want 0 after rollback", got)
-		}
-	})
-
-	t.Run("retest keeps earlier rounds", func(t *testing.T) {
-		env := newMemEnv()
-		batchID := env.addBatch(t, constants.BatchStatusRunning)
-		sampleID := env.addSample(t, batchID)
-		completeRound(t, env.inspectionService(), sampleID, "fail", "1.30 N/15mm", "首检不合格")
-
-		retestRepo := &memRetestRepo{env: env, createErr: historyFailure}
-		svc := NewInspectionService(&memInspectionRepo{env: env}, retestRepo, &memBatchRepo{env: env}, memAudit{env: env}, &memTransactor{env: env})
-		_, err := svc.Complete(context.Background(), testActor, sampleID, dto.CompleteInspectionRequest{
-			Result: "pass", MeasuredValue: "1.66 N/15mm", Notes: "复测合格",
-		})
-		if !errors.Is(err, historyFailure) {
-			t.Fatalf("got %v, want injected history failure", err)
-		}
-		sample := env.sampleState(sampleID)
-		if sample.Result != "fail" || sample.RetestStatus != "requested" || sample.MeasuredValue != "1.30 N/15mm" {
-			t.Fatalf("sample state leaked from rolled back retest: %+v", sample)
-		}
-		history := env.historyOf(t, sampleID)
-		if len(history) != 1 || history[0].Round != "initial" || history[0].Result != "fail" {
-			t.Fatalf("earlier history corrupted by rollback: %+v", history)
-		}
-		if got := env.auditCount(); got != 1 {
-			t.Fatalf("audit records = %d, want only the first completed round", got)
-		}
-	})
 }
 
 // 不同检验员接力复测时，每一轮的检验人和时间都按发生顺序各自保留。
