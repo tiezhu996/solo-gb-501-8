@@ -1,0 +1,12 @@
+.env.local
+.env.*.local
+.DS_Store
+backend/bin/
+backend/server
+backend/coverage.out
+frontend/node_modules/
+frontend/dist/
+frontend/*.tsbuildinfo
+frontend/vite.config.js
+frontend/vite.config.d.ts
+*.log
