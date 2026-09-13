@@ -58,7 +58,9 @@ func (r *inspectionRepository) List(ctx context.Context, filter InspectionFilter
 
 func (r *inspectionRepository) Find(ctx context.Context, id uint) (*model.InspectionSample, error) {
 	var sample model.InspectionSample
-	err := dbForContext(ctx, r.db).Preload("ProductionBatch").First(&sample, id).Error
+	err := dbForContext(ctx, r.db).Preload("ProductionBatch").
+		Preload("Retests", func(tx *gorm.DB) *gorm.DB { return tx.Order("sequence ASC") }).
+		First(&sample, id).Error
 	return &sample, err
 }
 

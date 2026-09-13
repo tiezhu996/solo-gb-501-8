@@ -32,6 +32,7 @@ export const batchAPI = {
 
 export const inspectionAPI = {
   list: (params: PageParams & { result?: string; batchId?: number }) => unwrap<PageResult<InspectionSample>>(apiClient.get('/inspections', { params })),
+  get: (id: number) => unwrap<InspectionSample>(apiClient.get(`/inspections/${id}`)),
   create: (payload: Pick<InspectionSample, 'productionBatchId' | 'sampleCode' | 'samplingPosition' | 'inspectionItem' | 'acceptanceRange' | 'notes'>) =>
     unwrap<InspectionSample>(apiClient.post('/inspections', payload)),
   complete: (id: number, payload: { result: 'pass' | 'fail'; measuredValue: string; notes?: string; requestRetest?: boolean }) =>

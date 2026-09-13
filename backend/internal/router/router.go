@@ -23,6 +23,7 @@ func Build(db *gorm.DB, redisClient *redis.Client, cfg config.Config) (*gin.Engi
 	lineRepo := repository.NewLineRepository(db)
 	batchRepo := repository.NewBatchRepository(db)
 	inspectionRepo := repository.NewInspectionRepository(db)
+	retestRepo := repository.NewRetestRepository(db)
 	releaseRepo := repository.NewReleaseRepository(db)
 	transactor := repository.NewTransactor(db)
 
@@ -30,7 +31,7 @@ func Build(db *gorm.DB, redisClient *redis.Client, cfg config.Config) (*gin.Engi
 	authService := service.NewAuthService(userRepo, cfg.JWTSecret, cfg.TokenTTL)
 	lineService := service.NewLineService(lineRepo, auditService, transactor)
 	batchService := service.NewBatchService(batchRepo, lineRepo, auditService, transactor)
-	inspectionService := service.NewInspectionService(inspectionRepo, batchRepo, auditService, transactor)
+	inspectionService := service.NewInspectionService(inspectionRepo, retestRepo, batchRepo, auditService, transactor)
 	releaseService := service.NewReleaseService(releaseRepo, batchRepo, inspectionRepo, auditService, transactor)
 
 	if err := authService.Seed(context.Background()); err != nil {

@@ -34,6 +34,18 @@ export interface ProductionBatch extends BaseEntity {
   decisions?: ReleaseDecision[]
 }
 
+export interface InspectionRetest extends BaseEntity {
+  inspectionSampleId: number
+  round: 'initial' | 'retest'
+  sequence: number
+  result: 'pass' | 'fail'
+  measuredValue: string
+  inspectorId?: number
+  inspectorName?: string
+  inspectedAt?: string
+  notes?: string
+}
+
 export interface InspectionSample extends BaseEntity {
   productionBatchId: number
   productionBatch?: ProductionBatch
@@ -48,6 +60,7 @@ export interface InspectionSample extends BaseEntity {
   inspectorName?: string
   inspectedAt?: string
   notes?: string
+  retests?: InspectionRetest[]
 }
 
 export interface ReleaseDecision extends BaseEntity {

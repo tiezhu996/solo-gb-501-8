@@ -43,9 +43,47 @@ func Migrate(db *gorm.DB) error {
 		&model.PackagingLine{},
 		&model.ProductionBatch{},
 		&model.InspectionSample{},
+		&model.InspectionRetest{},
 		&model.ReleaseDecision{},
 		&model.AuditLog{},
 	)
+}
+
+// BackfillRetestHistory 为历史数据中已完成但还没有检验轮次记录的样本补一条
+// 首检记录，保证样本详情总能按发生顺序展示首检和历次复测。幂等，可重复执行。
+func BackfillRetestHistory(db *gorm.DB) error {
+	var samples []model.InspectionSample
+	if err := db.Where("result IN ?", []string{"pass", "fail"}).Find(&samples).Error; err != nil {
+		return fmt.Errorf("list completed samples for retest backfill: %w", err)
+	}
+	for _, sample := range samples {
+		var count int64
+		if err := db.Model(&model.InspectionRetest{}).Where("inspection_sample_id = ?", sample.ID).Count(&count).Error; err != nil {
+			return fmt.Errorf("count retest history for sample %d: %w", sample.ID, err)
+		}
+		if count > 0 {
+			continue
+		}
+		record := model.InspectionRetest{
+			InspectionSampleID: sample.ID,
+			Round:              "initial",
+			Sequence:           1,
+			Result:             sample.Result,
+			MeasuredValue:      sample.MeasuredValue,
+			InspectorID:        sample.InspectorID,
+			InspectorName:      sample.InspectorName,
+			InspectedAt:        sample.InspectedAt,
+			Notes:              sample.Notes,
+		}
+		record.Normalize()
+		if err := record.Validate(); err != nil {
+			return fmt.Errorf("backfill retest history for sample %d: %w", sample.ID, err)
+		}
+		if err := db.Create(&record).Error; err != nil {
+			return fmt.Errorf("backfill retest history for sample %d: %w", sample.ID, err)
+		}
+	}
+	return nil
 }
 
 func Ready(ctx context.Context, db *gorm.DB) error {

@@ -61,6 +61,9 @@ func (s *releaseService) Decide(ctx context.Context, actor Actor, input dto.Crea
 		if err != nil {
 			return err
 		}
+		// 样本上的 result 始终是最新一次已完成结论（首检或最近一次复测），
+		// 因此这里只统计最新结论不合格的样本；较早轮次的不合格记录保存在
+		// 复测历史中，不再阻断放行。待检验和待复测的样本仍通过 incomplete 阻断。
 		failed, err := s.inspectionRepo.CountByResult(txCtx, batch.ID, "fail")
 		if err != nil {
 			return err

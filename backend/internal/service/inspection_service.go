@@ -24,14 +24,15 @@ type InspectionService interface {
 }
 
 type inspectionService struct {
-	repo      repository.InspectionRepository
-	batchRepo repository.BatchRepository
-	audit     AuditService
-	tx        repository.Transactor
+	repo       repository.InspectionRepository
+	retestRepo repository.RetestRepository
+	batchRepo  repository.BatchRepository
+	audit      AuditService
+	tx         repository.Transactor
 }
 
-func NewInspectionService(repo repository.InspectionRepository, batchRepo repository.BatchRepository, audit AuditService, tx repository.Transactor) InspectionService {
-	return &inspectionService{repo: repo, batchRepo: batchRepo, audit: audit, tx: tx}
+func NewInspectionService(repo repository.InspectionRepository, retestRepo repository.RetestRepository, batchRepo repository.BatchRepository, audit AuditService, tx repository.Transactor) InspectionService {
+	return &inspectionService{repo: repo, retestRepo: retestRepo, batchRepo: batchRepo, audit: audit, tx: tx}
 }
 
 func (s *inspectionService) List(ctx context.Context, filter repository.InspectionFilter) (dto.PageResult[model.InspectionSample], error) {
@@ -125,12 +126,44 @@ func (s *inspectionService) Complete(ctx context.Context, actor Actor, id uint, 
 		if err := s.repo.Save(txCtx, sample); err != nil {
 			return err
 		}
+		if err := s.recordRound(txCtx, sample, before.RetestStatus == "requested"); err != nil {
+			return err
+		}
 		return s.audit.Record(txCtx, actor, "inspection.completed", "InspectionSample", sample.ID, before, sample)
 	})
 	if err != nil {
 		return nil, err
 	}
 	return s.repo.Find(ctx, sample.ID)
+}
+
+// recordRound 把本次完成的检验轮次追加到复测历史：首检记为 initial，复测记为
+// retest，序号按样本递增。样本字段保存最新结论，历史记录保证各轮次可追溯。
+func (s *inspectionService) recordRound(ctx context.Context, sample *model.InspectionSample, isRetest bool) error {
+	count, err := s.retestRepo.CountBySample(ctx, sample.ID)
+	if err != nil {
+		return err
+	}
+	round := "initial"
+	if isRetest {
+		round = "retest"
+	}
+	record := &model.InspectionRetest{
+		InspectionSampleID: sample.ID,
+		Round:              round,
+		Sequence:           int(count) + 1,
+		Result:             sample.Result,
+		MeasuredValue:      sample.MeasuredValue,
+		InspectorID:        sample.InspectorID,
+		InspectorName:      sample.InspectorName,
+		InspectedAt:        sample.InspectedAt,
+		Notes:              sample.Notes,
+	}
+	record.Normalize()
+	if err := record.Validate(); err != nil {
+		return util.BadRequest(err.Error())
+	}
+	return s.retestRepo.Create(ctx, record)
 }
 
 func (s *inspectionService) RequestRetest(ctx context.Context, actor Actor, id uint, reason string) (*model.InspectionSample, error) {

@@ -5,9 +5,9 @@
 ## 主要流程
 
 1. 产线操作员在「产线总览」确认设备可用，在「批次队列」创建批次并开工。
-2. 检验员在「检验工作台」登记抽样位置和检验项目，录入合格/不合格结果；不合格结果自动进入待复测状态。
+2. 检验员在「检验工作台」登记抽样位置和检验项目，录入合格/不合格结果；不合格结果自动进入待复测状态。每次完成的检验轮次（首检和历次复测）都会保留测量值、结论、检验人、时间和备注，样本详情按发生顺序展示完整复测历史。
 3. 放行审批员在「放行审批」查看生产和检验依据，选择放行、隔离或返工。
-4. 放行要求至少一项检验、无待检验、无待复测且无不合格结果；隔离和返工会同步更新批次状态。
+4. 放行要求至少一项检验、无待检验、无待复测，且每个样本最新一次已完成结论均为合格（较早轮次的不合格记录不再阻断）；隔离和返工会同步更新批次状态。
 5. 管理员在「审计记录」按操作者、实体或请求 ID 回溯操作。
 
 首次启动会幂等写入 3 条产线、4 个批次和 5 条检验样本，便于直接验证完整流程；已有业务数据时不会覆盖。
@@ -118,7 +118,8 @@ docker compose config --quiet
 | `GET/POST/PATCH /api/batches` | 批次查询、创建、更新 | `batch:write` |
 | `POST /api/batches/:id/transition` | 开工、暂停、恢复或进入返工 | `batch:write` |
 | `GET/POST /api/inspections` | 检验查询和登记 | `inspection:write` |
-| `POST /api/inspections/:id/complete` | 录入检验或复测结果 | `inspection:write` |
+| `GET /api/inspections/:id` | 样本详情（含按序排列的首检和历次复测记录） | 已登录 |
+| `POST /api/inspections/:id/complete` | 录入检验或复测结果（自动追加复测历史） | `inspection:write` |
 | `GET/POST /api/release-decisions` | 查看和提交放行决定 | `release:write` |
 | `GET /api/audit-logs` | 查询不可变更的审计事件 | `audit:read` |
 

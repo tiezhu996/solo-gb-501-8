@@ -57,9 +57,11 @@ func (r *batchRepository) List(ctx context.Context, filter BatchFilter) ([]model
 
 func (r *batchRepository) Find(ctx context.Context, id uint) (*model.ProductionBatch, error) {
 	var batch model.ProductionBatch
-	err := dbForContext(ctx, r.db).Preload("PackagingLine").Preload("Inspections").Preload("Decisions", func(tx *gorm.DB) *gorm.DB {
-		return tx.Order("created_at DESC")
-	}).First(&batch, id).Error
+	err := dbForContext(ctx, r.db).Preload("PackagingLine").Preload("Inspections").
+		Preload("Inspections.Retests", func(tx *gorm.DB) *gorm.DB { return tx.Order("sequence ASC") }).
+		Preload("Decisions", func(tx *gorm.DB) *gorm.DB {
+			return tx.Order("created_at DESC")
+		}).First(&batch, id).Error
 	return &batch, err
 }
 

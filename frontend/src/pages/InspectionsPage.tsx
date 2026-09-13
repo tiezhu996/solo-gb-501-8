@@ -1,10 +1,11 @@
-import { CheckOutlined, PlusOutlined, SearchOutlined } from '@ant-design/icons'
-import { Button, Col, Form, Input, Modal, Radio, Row, Select, Space, Typography, message } from 'antd'
+import { CheckOutlined, HistoryOutlined, PlusOutlined, SearchOutlined } from '@ant-design/icons'
+import { Button, Col, Drawer, Form, Input, Modal, Radio, Row, Select, Space, Typography, message } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import { useEffect, useState } from 'react'
 import { batchAPI, inspectionAPI } from '../api'
 import { BatchStatusBadge } from '../components/common/BatchStatusBadge'
 import { EntityTable } from '../components/common/EntityTable'
+import { RetestHistory } from '../components/common/RetestHistory'
 import { StatusBadge } from '../components/common/StatusBadge'
 import { useAuth } from '../hooks/useAuth'
 import { usePagination } from '../hooks/usePagination'
@@ -21,6 +22,8 @@ export function InspectionsPage() {
   const [result, setResult] = useState<string>()
   const [createOpen, setCreateOpen] = useState(false)
   const [completeTarget, setCompleteTarget] = useState<InspectionSample | null>(null)
+  const [historySample, setHistorySample] = useState<InspectionSample | null>(null)
+  const [historyLoading, setHistoryLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [createForm] = Form.useForm()
   const [completeForm] = Form.useForm()
@@ -38,6 +41,10 @@ export function InspectionsPage() {
     setSaving(true)
     try { await inspectionAPI.complete(completeTarget.id, values); message.success('检验结果已提交'); setCompleteTarget(null); completeForm.resetFields(); await refresh() } finally { setSaving(false) }
   }
+  const openHistory = async (row: InspectionSample) => {
+    setHistoryLoading(true)
+    try { setHistorySample(await inspectionAPI.get(row.id)) } finally { setHistoryLoading(false) }
+  }
   const columns: ColumnsType<InspectionSample> = [
     { title: '样本编号', dataIndex: 'sampleCode', fixed: 'left' },
     { title: '生产批次', render: (_, row) => <Space>{row.productionBatch?.batchNo || row.productionBatchId}{row.productionBatch && <BatchStatusBadge status={row.productionBatch.status} />}</Space> },
@@ -48,7 +55,7 @@ export function InspectionsPage() {
     { title: '结果', dataIndex: 'result', render: (value) => <StatusBadge value={value} /> },
     { title: '复测状态', dataIndex: 'retestStatus', render: (value) => <StatusBadge value={value} /> },
     { title: '检验员/时间', render: (_, row) => <div>{row.inspectorName || '-'}<small className="cell-subtitle">{formatDateTime(row.inspectedAt)}</small></div> },
-    { title: '操作', fixed: 'right', render: (_, row) => (row.result === 'pending' || row.retestStatus === 'requested') && <Button size="small" type="primary" icon={<CheckOutlined />} disabled={!can('inspection:write')} onClick={() => setCompleteTarget(row)}>录入结果</Button> },
+    { title: '操作', fixed: 'right', render: (_, row) => <Space><Button size="small" icon={<HistoryOutlined />} onClick={() => void openHistory(row)}>历史</Button>{(row.result === 'pending' || row.retestStatus === 'requested') && <Button size="small" type="primary" icon={<CheckOutlined />} disabled={!can('inspection:write')} onClick={() => setCompleteTarget(row)}>录入结果</Button>}</Space> },
   ]
   return (
     <div className="page-stack">
@@ -61,6 +68,14 @@ export function InspectionsPage() {
       <Modal title={`录入结果 · ${completeTarget?.sampleCode || ''}`} open={Boolean(completeTarget)} confirmLoading={saving} onOk={() => void complete()} onCancel={() => setCompleteTarget(null)} okText="提交" cancelText="取消">
         <Form form={completeForm} layout="vertical" initialValues={{ result: 'pass' }}><Form.Item name="result" label="检验结果" rules={[{ required: true }]}><Radio.Group optionType="button" buttonStyle="solid" options={[{ label: '合格', value: 'pass' }, { label: '不合格', value: 'fail' }]} /></Form.Item><Form.Item name="measuredValue" label="测量值/结论" rules={[{ required: true }]}><Input /></Form.Item><Form.Item name="notes" label="检验说明"><Input.TextArea rows={3} /></Form.Item></Form>
       </Modal>
+      <Drawer title={`检验历史 · ${historySample?.sampleCode || ''}`} width={480} open={Boolean(historySample)} onClose={() => setHistorySample(null)} loading={historyLoading}>
+        {historySample && (
+          <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+            <Typography.Text type="secondary">{historySample.inspectionItem} · 接受范围 {historySample.acceptanceRange}</Typography.Text>
+            <RetestHistory sample={historySample} />
+          </Space>
+        )}
+      </Drawer>
     </div>
   )
 }

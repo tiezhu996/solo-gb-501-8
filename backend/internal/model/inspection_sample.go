@@ -11,19 +11,20 @@ var sampleCodePattern = regexp.MustCompile(`^[A-Z0-9][A-Z0-9-]{2,49}$`)
 
 type InspectionSample struct {
 	Base
-	ProductionBatchID uint            `gorm:"index;not null" json:"productionBatchId"`
-	ProductionBatch   ProductionBatch `json:"productionBatch,omitempty"`
-	SampleCode        string          `gorm:"size:50;uniqueIndex;not null" json:"sampleCode"`
-	SamplingPosition  string          `gorm:"size:120;not null" json:"samplingPosition"`
-	InspectionItem    string          `gorm:"size:120;not null" json:"inspectionItem"`
-	Result            string          `gorm:"size:20;index;not null;default:'pending'" json:"result"`
-	MeasuredValue     string          `gorm:"size:100" json:"measuredValue"`
-	AcceptanceRange   string          `gorm:"size:100" json:"acceptanceRange"`
-	RetestStatus      string          `gorm:"size:20;not null;default:'none'" json:"retestStatus"`
-	InspectorID       uint            `gorm:"index" json:"inspectorId"`
-	InspectorName     string          `gorm:"size:100" json:"inspectorName"`
-	InspectedAt       *time.Time      `json:"inspectedAt"`
-	Notes             string          `gorm:"size:1000" json:"notes"`
+	ProductionBatchID uint               `gorm:"index;not null" json:"productionBatchId"`
+	ProductionBatch   ProductionBatch    `json:"productionBatch,omitempty"`
+	SampleCode        string             `gorm:"size:50;uniqueIndex;not null" json:"sampleCode"`
+	SamplingPosition  string             `gorm:"size:120;not null" json:"samplingPosition"`
+	InspectionItem    string             `gorm:"size:120;not null" json:"inspectionItem"`
+	Result            string             `gorm:"size:20;index;not null;default:'pending'" json:"result"`
+	MeasuredValue     string             `gorm:"size:100" json:"measuredValue"`
+	AcceptanceRange   string             `gorm:"size:100" json:"acceptanceRange"`
+	RetestStatus      string             `gorm:"size:20;not null;default:'none'" json:"retestStatus"`
+	InspectorID       uint               `gorm:"index" json:"inspectorId"`
+	InspectorName     string             `gorm:"size:100" json:"inspectorName"`
+	InspectedAt       *time.Time         `json:"inspectedAt"`
+	Notes             string             `gorm:"size:1000" json:"notes"`
+	Retests           []InspectionRetest `gorm:"foreignKey:InspectionSampleID" json:"retests,omitempty"`
 }
 
 func (s *InspectionSample) Normalize() {

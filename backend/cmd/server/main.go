@@ -36,6 +36,10 @@ func main() {
 		slog.Error("seed demo data", "error", err)
 		os.Exit(1)
 	}
+	if err := util.BackfillRetestHistory(db); err != nil {
+		slog.Error("backfill retest history", "error", err)
+		os.Exit(1)
+	}
 	redisClient := redis.NewClient(&redis.Options{Addr: cfg.RedisAddr, Password: cfg.RedisPassword, DB: cfg.RedisDB})
 	defer redisClient.Close()
 	engine, err := router.Build(db, redisClient, cfg)
