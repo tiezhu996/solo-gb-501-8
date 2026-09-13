@@ -111,14 +111,7 @@ func (s *inspectionService) Complete(ctx context.Context, actor Actor, id uint, 
 		sample.InspectorID = actor.ID
 		sample.InspectorName = actor.Name
 		sample.InspectedAt = &now
-		if input.RequestRetest || input.Result == "fail" {
-			sample.RetestStatus = "requested"
-		} else {
-			sample.RetestStatus = "none"
-		}
-		if before.RetestStatus == "requested" && !input.RequestRetest {
-			sample.RetestStatus = "completed"
-		}
+		sample.RetestStatus = model.NextRetestStatus(before.RetestStatus, input.Result, input.RequestRetest)
 		sample.Normalize()
 		if err := sample.ValidateDefinition(); err != nil {
 			return util.BadRequest(err.Error())

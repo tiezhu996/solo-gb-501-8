@@ -88,6 +88,18 @@ func (s InspectionSample) Completed() bool {
 	return s.Result == "pass" || s.Result == "fail"
 }
 
+// NextRetestStatus 计算一次检验录入后的复测状态：只要最新结论不合格（或显式
+// 申请复测）就保持待复测，允许连续复测；复测合格才记为复测完成。
+func NextRetestStatus(previous, result string, requestRetest bool) string {
+	if result == "fail" || requestRetest {
+		return "requested"
+	}
+	if previous == "requested" {
+		return "completed"
+	}
+	return "none"
+}
+
 func (s InspectionSample) BlocksRelease() bool {
 	return s.Result != "pass" || s.RetestStatus == "requested"
 }

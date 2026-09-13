@@ -44,3 +44,24 @@ func TestInspectionValidation(t *testing.T) {
 		t.Fatal("pending sample with timestamp must fail")
 	}
 }
+
+func TestNextRetestStatus(t *testing.T) {
+	cases := []struct {
+		name          string
+		previous      string
+		result        string
+		requestRetest bool
+		want          string
+	}{
+		{"initial pass needs no retest", "none", "pass", false, "none"},
+		{"initial fail waits for retest", "none", "fail", false, "requested"},
+		{"retest pass completes retest", "requested", "pass", false, "completed"},
+		{"retest fail keeps waiting for another retest", "requested", "fail", false, "requested"},
+		{"explicit retest request wins", "requested", "pass", true, "requested"},
+	}
+	for _, tc := range cases {
+		if got := NextRetestStatus(tc.previous, tc.result, tc.requestRetest); got != tc.want {
+			t.Errorf("%s: NextRetestStatus(%q, %q, %v) = %q, want %q", tc.name, tc.previous, tc.result, tc.requestRetest, got, tc.want)
+		}
+	}
+}
